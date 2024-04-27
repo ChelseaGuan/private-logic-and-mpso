@@ -18,11 +18,19 @@ use std::cmp;
 use std::os::unix::net::UnixStream;
 use std::time::Instant;
 use structopt::StructOpt;
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::fs;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PartySets {
+    results: Vec<Vec<usize>>,
+}
 
 #[derive(StructOpt)]
 #[structopt(
-    name = "EC-based MPSO",
-    about = "Fast Multi-party Private Set Operations using Secure Elliptic Curve-based ANDs and ORs"
+name = "EC-based MPSO",
+about = "Fast Multi-party Private Set Operations using Secure Elliptic Curve-based ANDs and ORs"
 )]
 enum Opt {
     #[structopt(about = "Performs a batch OR")]
@@ -66,7 +74,7 @@ enum Opt {
         print_result: bool,
     },
     #[structopt(
-        about = "Performs a set union using bitsets, and potentially divides-and-conquers"
+    about = "Performs a set union using bitsets, and potentially divides-and-conquers"
     )]
     ExactSetUnion {
         n_parties: usize,
@@ -347,6 +355,37 @@ fn run_approx_set_intersection(
     }
 }
 
+// fn run_exact_set_union(
+//     n_parties: usize,
+//     set_size_k: usize,
+//     universe: usize,
+//     divisions: usize,
+//     print_result: bool,
+// ) {
+//     println!(
+//         "Performing a set union between {} parties with {} elements.",
+//         n_parties, set_size_k
+//     );
+//     let party_sets = gen_sets_with_union(
+//         n_parties,
+//         set_size_k,
+//         universe,
+//         OsRng.gen_range(set_size_k..=cmp::min(n_parties * set_size_k, universe)),
+//     );
+//     let (leader, assistants) = setup(n_parties);
+//     let now = Instant::now();
+//     let result = match divisions {
+//         0 | 1 => mpsu_small(leader, assistants, party_sets, universe),
+//         _ => mpsu_large(leader, assistants, party_sets, universe, divisions),
+//     };
+//     println!("Took: {} ms", now.elapsed().as_millis());
+//     if print_result {
+//         println!("Result: {:?}", result);
+//     }
+// }
+
+use std::path::Path;
+
 fn run_exact_set_union(
     n_parties: usize,
     set_size_k: usize,
@@ -354,27 +393,36 @@ fn run_exact_set_union(
     divisions: usize,
     print_result: bool,
 ) {
-    println!(
-        "Performing a set union between {} parties with {} elements.",
-        n_parties, set_size_k
-    );
-    let party_sets = gen_sets_with_union(
-        n_parties,
-        set_size_k,
-        universe,
-        OsRng.gen_range(set_size_k..=cmp::min(n_parties * set_size_k, universe)),
-    );
+    // Read the JSON file
+    let file_content = fs::read_to_string(Path::new("/home/chelsea/Documents/GitHub/threshold-multiparty-psi/cmake-build-debug/output.json"))
+        .expect("Failed to read file");
+
+    // Deserialize the JSON data into the PartySets struct
+    let party_data: PartySets = serde_json::from_str(&file_content)
+        .expect("Failed to parse JSON");
+
+    // Convert JSON results to your Set type
+    let party_sets: Vec<Set> = party_data.results.iter()
+        .map(|vec| Set::new(vec))
+        .collect();
+
+    let n_parties = party_sets.len();
     let (leader, assistants) = setup(n_parties);
     let now = Instant::now();
     let result = match divisions {
         0 | 1 => mpsu_small(leader, assistants, party_sets, universe),
         _ => mpsu_large(leader, assistants, party_sets, universe, divisions),
     };
-    println!("Took: {} ms", now.elapsed().as_millis());
+    let elapsed = now.elapsed();
+    println!("Took: {} ms", elapsed.as_millis());
+    println!("Result: {:?}", result);
     if print_result {
         println!("Result: {:?}", result);
     }
+
 }
+
+
 
 fn test_cases() {
     let (leader, assistants) = setup(3);
